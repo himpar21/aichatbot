@@ -1,4 +1,3 @@
-
 import streamlit as st
 import os
 from langchain_groq import ChatGroq
@@ -7,7 +6,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains import create_retrieval_chain
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import DocArrayInMemorySearch
 from langchain_community.document_loaders import PyPDFLoader
 from dotenv import load_dotenv
 import tempfile
@@ -21,7 +20,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ----------- 3. Enhanced prompt -----------
 prompt = ChatPromptTemplate.from_template(
     """
     You are an expert AI assistant. Answer ONLY with information from the context provided below.
@@ -34,7 +32,6 @@ prompt = ChatPromptTemplate.from_template(
     Question: {input}
     """
 )
-# ------------------------------------------
 
 llm = ChatGroq(groq_api_key=groq_api_key, model_name="Llama3-8b-8192")
 
@@ -64,19 +61,19 @@ def initialize_vector_db(pdf_file):
                     encode_kwargs={'normalize_embeddings': True}
                 )
 
-                # ----------- 1. Improved chunking -----------
+                # Improved chunking
                 st.session_state.loader = PyPDFLoader(pdf_file_path)
                 st.session_state.text_document_from_pdf = st.session_state.loader.load()
                 st.session_state.text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=1500,  # Larger chunks for more context
-                    chunk_overlap=300  # More overlap for continuity
+                    chunk_size=1500,
+                    chunk_overlap=300
                 )
                 st.session_state.final_document_chunks = st.session_state.text_splitter.split_documents(
                     st.session_state.text_document_from_pdf
                 )
-                # ---------------------------------------------
 
-                st.session_state.vector_store = Chroma.from_documents(
+                # Use DocArrayInMemorySearch as vectorstore
+                st.session_state.vector_store = DocArrayInMemorySearch.from_documents(
                     st.session_state.final_document_chunks,
                     st.session_state.embeddings
                 )
@@ -122,11 +119,8 @@ if "vector_store" in st.session_state:
             if "vector_store" in st.session_state:
                 with st.spinner("Searching for answer..."):
                     document_chain = create_stuff_documents_chain(llm, prompt)
-                    
-                    # ----------- 2. Retrieve more chunks -----------
-                    retriever = st.session_state.vector_store.as_retriever(search_kwargs={"k": 5})  # Retrieve 5 relevant chunks
-                    # ------------------------------------------------
-                    
+                    # Retrieve more chunks for better context
+                    retriever = st.session_state.vector_store.as_retriever(search_kwargs={"k": 5})
                     retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
                     response = retrieval_chain.invoke({'input': user_prompt})
